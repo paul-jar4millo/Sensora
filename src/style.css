@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+/* ── Tokens ───────────────────────────────────────────── */
+:root {
+  --bg: #0b0c0e;
+  --surface: #141618;
+  --border: #252729;
+  --accent: #ffffff;
+  /* verde sensor */
+  --danger: #ff4d6d;
+  --text: #e8eaed;
+  --muted: #6b7280;
+
+  --font-display: "Syne", sans-serif;
+  --font-mono: "DM Mono", monospace;
+
+  --r: 12px;
+}
+
+/* ── Reset mínimo ─────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ── Header ───────────────────────────────────────────── */
+#app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+#app-name {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+
+/* ── Badge ────────────────────────────────────────────── */
+.badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.badge--loading .badge__dot {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.badge--ready {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.badge--ready .badge__dot {
+  background: var(--accent);
+  animation: none;
+}
+
+.badge--error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.badge--error .badge__dot {
+  background: var(--danger);
+  animation: none;
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ── Cámara ───────────────────────────────────────────── */
+#camera-wrap {
+  position: relative;
+  flex: 1;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+#webcam,
+#overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#overlay {
+  z-index: 1;
+}
+
+/* ── Footer ───────────────────────────────────────────── */
+#app-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
