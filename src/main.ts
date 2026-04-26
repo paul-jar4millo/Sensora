@@ -230,7 +230,7 @@ function processDetections(predictions: cocoSsd.DetectedObject[]): cocoSsd.Detec
     for (const item of priorityItems) {
       const className = item.prediction.class;
       if (!lastSpokenTime[className] || now - lastSpokenTime[className] > SPEECH_COOLDOWN_MS) {
-        notifyVoice(item.prediction, item.isMoving, frameWidth, frameHeight);
+        notifyVoice(item.prediction, item.isMoving, frameWidth);
         lastSpokenTime[className] = now;
       }
     }
@@ -241,7 +241,7 @@ function processDetections(predictions: cocoSsd.DetectedObject[]): cocoSsd.Detec
   return predictionsWithContext.map(item => item.prediction);
 }
 
-function notifyVoice(prediction: cocoSsd.DetectedObject, isMoving: boolean, frameWidth: number, frameHeight: number) {
+function notifyVoice(prediction: cocoSsd.DetectedObject, isMoving: boolean, frameWidth: number) {
   const translatedName = translateClass(prediction.class);
   const center = getCenter(prediction.bbox);
 
