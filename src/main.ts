@@ -354,4 +354,15 @@ async function predictLoop(model: cocoSsd.ObjectDetection) {
   }, 1000 / FPS_LIMIT);
 }
 
-setupCamera().then(init);
+const startBtn = document.getElementById("start-btn") as HTMLButtonElement;
+const startScreen = document.getElementById("start-screen") as HTMLDivElement;
+
+startBtn.addEventListener("click", () => {
+  const unlockUtterance = new SpeechSynthesisUtterance("Iniciando Sensora");
+  unlockUtterance.lang = "es-ES";
+  unlockUtterance.volume = 1.0;
+  window.speechSynthesis.speak(unlockUtterance);
+
+  startScreen.style.display = "none";
+  setupCamera().then(init);
+});

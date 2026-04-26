@@ -24,6 +24,13 @@
   <main id="camera-wrap">
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
+    
+    <!-- Pantalla de inicio requerida para desbloquear audio en iOS -->
+    <div id="start-screen" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 10;">
+      <button id="start-btn" style="padding: 1rem 2rem; font-size: 1.2rem; background: var(--accent); color: #000; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">
+        Activar Cámara y Audio
+      </button>
+    </div>
   </main>
 
   <footer id="app-footer">
