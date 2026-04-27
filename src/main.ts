@@ -2,6 +2,7 @@ import "@tensorflow/tfjs-backend-cpu";
 import "@tensorflow/tfjs-backend-webgl";
 import * as cocoSsd from "@tensorflow-models/coco-ssd";
 import * as tf from "@tensorflow/tfjs-core";
+import * as depthEstimation from "@tensorflow-models/depth-estimation";
 
 // Referencias
 const video = document.getElementById("webcam") as HTMLVideoElement;
@@ -60,7 +61,8 @@ const TRANSLATIONS: Record<string, string> = {
   "umbrella": "paraguas",
   "handbag": "bolso",
   "tie": "corbata",
-  "suitcase": "maleta"
+  "suitcase": "maleta",
+  "unknown": "obstáculo"
 };
 
 function translateClass(className: string): string {
@@ -93,6 +95,7 @@ const RISK_MAP: Record<string, number> = {
   "door": RISK_LEVELS.OBSTACLE,
   "wall": RISK_LEVELS.OBSTACLE,
   "pole": RISK_LEVELS.OBSTACLE,
+  "unknown": RISK_LEVELS.OBSTACLE,
 
   // Informativos (Contexto)
   "chair": RISK_LEVELS.INFORMATIVE,
@@ -166,15 +169,56 @@ async function init() {
   // Cargar tensorflow
   await tf.ready();
   console.log("Backend activo:", tf.getBackend());
-  // Cargar modelo
-  const model = await cocoSsd.load();
-  console.log("Modelo COCO-SSD cargado correctamente");
 
+  // Cargar modelos
+  const [model, depthEstimator] = await Promise.all([
+    cocoSsd.load(),
+    depthEstimation.createEstimator(depthEstimation.SupportedModels.ARPortraitDepth)
+  ]);
+  console.log("Modelos cargados correctamente");
 
   statusBadge.innerText = "Modelo Listo";
   statusBadge.classList.add("ready");
 
-  predictLoop(model);
+  predictLoop(model, depthEstimator);
+}
+
+// Analizar Profundidad
+async function analyzeDepthMap(depthMap: depthEstimation.DepthMap, width: number, height: number): Promise<cocoSsd.DetectedObject[]> {
+  if (!width || !height) return [];
+
+  const depthData = await depthMap.toArray();
+
+  const startY = Math.floor(height * 0.6);
+  const endY = Math.floor(height * 0.9);
+  const startX = Math.floor(width * 0.35);
+  const endX = Math.floor(width * 0.65);
+
+  let closePixels = 0;
+  let totalSampled = 0;
+
+  for (let y = startY; y < endY; y += 5) {
+    for (let x = startX; x < endX; x += 5) {
+      const pixel = depthData[y][x] as any;
+      const val = Array.isArray(pixel) ? pixel[0] : pixel;
+      if (val < 0.3) {
+        closePixels++;
+      }
+      totalSampled++;
+    }
+  }
+
+  const closeRatio = closePixels / totalSampled;
+
+  if (closeRatio > 0.4) {
+    return [{
+      bbox: [width * 0.25, height * 0.4, width * 0.5, height * 0.5],
+      class: "unknown",
+      score: closeRatio
+    }];
+  }
+
+  return [];
 }
 
 function processDetections(predictions: cocoSsd.DetectedObject[]): cocoSsd.DetectedObject[] {
@@ -343,14 +387,21 @@ function drawPredictions(predictions: cocoSsd.DetectedObject[]) {
   });
 }
 
-async function predictLoop(model: cocoSsd.ObjectDetection) {
-  const rawPredictions = await model.detect(video); // Realizar detección
-  const confidentPredictions = processDetections(rawPredictions); // Filtrar predicciones
-  drawPredictions(confidentPredictions); // Dibujar predicciones
+async function predictLoop(model: cocoSsd.ObjectDetection, depthEstimator: depthEstimation.DepthEstimator) {
+  const [rawPredictions, depthMap] = await Promise.all([
+    model.detect(video),
+    depthEstimator.estimateDepth(video, { minDepth: 0, maxDepth: 1 })
+  ]);
 
-  // Repetir ciclo
+  const depthPredictions = await analyzeDepthMap(depthMap, video.videoWidth, video.videoHeight);
+
+  const allPredictions = [...rawPredictions, ...depthPredictions];
+  const confidentPredictions = processDetections(allPredictions);
+
+  drawPredictions(confidentPredictions);
+
   setTimeout(() => {
-    requestAnimationFrame(() => predictLoop(model));
+    requestAnimationFrame(() => predictLoop(model, depthEstimator));
   }, 1000 / FPS_LIMIT);
 }
 
