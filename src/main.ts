@@ -2,7 +2,6 @@ import "@tensorflow/tfjs-backend-cpu";
 import "@tensorflow/tfjs-backend-webgl";
 import * as cocoSsd from "@tensorflow-models/coco-ssd";
 import * as tf from "@tensorflow/tfjs-core";
-import * as depthEstimation from "@tensorflow-models/depth-estimation";
 
 // Referencias
 const video = document.getElementById("webcam") as HTMLVideoElement;
@@ -16,6 +15,11 @@ const SPEECH_COOLDOWN_MS = 5000;
 let frameHistory: string[][] = [];
 let lastSpokenTime: Record<string, number> = {};
 let previousDetections: cocoSsd.DetectedObject[] = [];
+
+// Canvas oculto para análisis de proximidad por diferencia de frames
+const proximityCanvas = document.createElement("canvas");
+const proximityCtx = proximityCanvas.getContext("2d", { willReadFrequently: true })!;
+let previousFrameData: ImageData | null = null;
 
 
 // Traducciones de objetos
@@ -166,55 +170,69 @@ async function setupCamera(): Promise<void> {
 
 // Inicialización
 async function init() {
-  // Cargar tensorflow
   await tf.ready();
   console.log("Backend activo:", tf.getBackend());
 
-  // Cargar modelos
-  const [model, depthEstimator] = await Promise.all([
-    cocoSsd.load(),
-    depthEstimation.createEstimator(depthEstimation.SupportedModels.ARPortraitDepth)
-  ]);
-  console.log("Modelos cargados correctamente");
+  const model = await cocoSsd.load();
+  console.log("Modelo COCO-SSD cargado correctamente");
 
   statusBadge.innerText = "Modelo Listo";
   statusBadge.classList.add("ready");
 
-  predictLoop(model, depthEstimator);
+  predictLoop(model);
 }
 
-// Analizar Profundidad
-async function analyzeDepthMap(depthMap: depthEstimation.DepthMap, width: number, height: number): Promise<cocoSsd.DetectedObject[]> {
+// Detección de obstáculos desconocidos por diferencia de frames (sin dependencias externas)
+function analyzeProximity(): cocoSsd.DetectedObject[] {
+  const width = video.videoWidth;
+  const height = video.videoHeight;
   if (!width || !height) return [];
 
-  const depthData = await depthMap.toArray();
+  // Escalar a un tamaño pequeño para mayor rendimiento
+  const sampleW = 64;
+  const sampleH = 48;
+  proximityCanvas.width = sampleW;
+  proximityCanvas.height = sampleH;
 
-  const startY = Math.floor(height * 0.6);
-  const endY = Math.floor(height * 0.9);
-  const startX = Math.floor(width * 0.35);
-  const endX = Math.floor(width * 0.65);
+  proximityCtx.drawImage(video, 0, 0, sampleW, sampleH);
+  const currentFrame = proximityCtx.getImageData(0, 0, sampleW, sampleH);
 
-  let closePixels = 0;
-  let totalSampled = 0;
+  if (!previousFrameData) {
+    previousFrameData = currentFrame;
+    return [];
+  }
 
-  for (let y = startY; y < endY; y += 5) {
-    for (let x = startX; x < endX; x += 5) {
-      const pixel = depthData[y][x] as any;
-      const val = Array.isArray(pixel) ? pixel[0] : pixel;
-      if (val < 0.3) {
-        closePixels++;
-      }
-      totalSampled++;
+  // Zona central (40%–60% x, 55%–85% y) del frame muestreado
+  const x0 = Math.floor(sampleW * 0.35);
+  const x1 = Math.floor(sampleW * 0.65);
+  const y0 = Math.floor(sampleH * 0.55);
+  const y1 = Math.floor(sampleH * 0.85);
+
+  let changedPixels = 0;
+  let totalPixels = 0;
+
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * sampleW + x) * 4;
+      const dr = Math.abs(currentFrame.data[i]     - previousFrameData.data[i]);
+      const dg = Math.abs(currentFrame.data[i + 1] - previousFrameData.data[i + 1]);
+      const db = Math.abs(currentFrame.data[i + 2] - previousFrameData.data[i + 2]);
+      const diff = (dr + dg + db) / 3;
+      if (diff > 25) changedPixels++; // umbral de cambio significativo
+      totalPixels++;
     }
   }
 
-  const closeRatio = closePixels / totalSampled;
+  previousFrameData = currentFrame;
 
-  if (closeRatio > 0.4) {
+  const changeRatio = changedPixels / totalPixels;
+
+  // Si más del 30% de la zona central está cambiando (masa en movimiento acercandose)
+  if (changeRatio > 0.30) {
     return [{
-      bbox: [width * 0.25, height * 0.4, width * 0.5, height * 0.5],
+      bbox: [width * 0.25, height * 0.45, width * 0.5, height * 0.45],
       class: "unknown",
-      score: closeRatio
+      score: changeRatio
     }];
   }
 
@@ -387,21 +405,17 @@ function drawPredictions(predictions: cocoSsd.DetectedObject[]) {
   });
 }
 
-async function predictLoop(model: cocoSsd.ObjectDetection, depthEstimator: depthEstimation.DepthEstimator) {
-  const [rawPredictions, depthMap] = await Promise.all([
-    model.detect(video),
-    depthEstimator.estimateDepth(video, { minDepth: 0, maxDepth: 1 })
-  ]);
+async function predictLoop(model: cocoSsd.ObjectDetection) {
+  const rawPredictions = await model.detect(video);
+  const proximityPredictions = analyzeProximity();
 
-  const depthPredictions = await analyzeDepthMap(depthMap, video.videoWidth, video.videoHeight);
-
-  const allPredictions = [...rawPredictions, ...depthPredictions];
+  const allPredictions = [...rawPredictions, ...proximityPredictions];
   const confidentPredictions = processDetections(allPredictions);
 
   drawPredictions(confidentPredictions);
 
   setTimeout(() => {
-    requestAnimationFrame(() => predictLoop(model, depthEstimator));
+    requestAnimationFrame(() => predictLoop(model));
   }, 1000 / FPS_LIMIT);
 }
 

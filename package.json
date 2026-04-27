@@ -17,7 +17,6 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",
     "@tensorflow-models/coco-ssd": "^2.2.3",
-    "@tensorflow-models/depth-estimation": "^0.0.4",
     "@tensorflow/tfjs-backend-cpu": "^4.22.0",
     "@tensorflow/tfjs-backend-webgl": "^4.22.0",
     "@tensorflow/tfjs-core": "^4.22.0",
